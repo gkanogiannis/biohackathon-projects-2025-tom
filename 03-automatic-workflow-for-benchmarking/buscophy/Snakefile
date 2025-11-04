@@ -177,6 +177,16 @@ for file in results/busco/{wildcards.species}/run_{wildcards.lineage}/busco_sequ
     sed -i 's/^>/>{wildcards.species}|/g' {params.phylo_dir}/{wildcards.species}_$(basename ${{file}})
 done
 
+for file in results/busco/{wildcards.species}/run_{wildcards.lineage}/busco_sequences/multi_copy_busco_sequences/*.faa; do
+    # copy aminoacids
+    cp ${{file}} {params.phylo_dir}/{wildcards.species}_$(basename ${{file}})
+    for j in $(grep -c '>' ${{file}}) do :
+        sed -i 's/^>/>{wildcards.species}_${{j}}/g' {params.phylo_dir}/{wildcards.species}_$(basename ${{file}})
+    done
+
+    #sed -i 's/^>/>{wildcards.species}|/g' {params.phylo_dir}/{wildcards.species}_$(basename ${{file}})
+done
+
 """
 
 #### here we added minimum number of busco genes per sample... 
@@ -225,8 +235,7 @@ done
 sort {output.complete} | uniq -c | sed 's/^ *//' > {output.count_compl}
 awk '$1 >= {params.min_tax} {{print $2}}' {output.count_compl} > {output.final}
 
-        """
-#awk '$NF > 2 {{print $2}}' {output.count_compl} > {output.final}
+"""
 
 checkpoint collect_busco:
     input:
@@ -253,7 +262,6 @@ while read line; do
 done<{input}
 """
 
-
 rule busco_mafft:
     input:
         "results/phylo/busco_aa_collection/{busco_EOG}_aa.fasta"
@@ -269,7 +277,7 @@ rule busco_mafft:
     shell:
         """
 ( mafft-linsi --thread {threads} {input} > {output} )&>{log}
-"""
+        """
 
 rule busco_mafftnt:
     input:
@@ -288,7 +296,6 @@ rule busco_mafftnt:
 ( mafft-linsi --thread {threads} {input.nt_seq} > {output.nt_alignment} )&>{log}
         """
 
-
 rule busco_trim:
     input:
         "results/phylo/busco_aa_alignments/{busco_EOG}_aa.fasta"
@@ -302,7 +309,7 @@ rule busco_trim:
     shell:
         """
 trimal -in {input} -out {output}
-"""
+        """
 
 rule busco_trim_nt:
     input:
@@ -317,7 +324,75 @@ rule busco_trim_nt:
     shell:
         """
 trimal -in {input} -out {output}
+        """
+
+# Rule to generate one tree per gene
+
+rule busco_geneTrees:
+    input:
+        "results/phylo/busco_aa_alignments_trim/{busco_EOG}_aa.fasta"
+    output:
+        tree_file="results/phylo/busco_aa_gene_trees/{busco_EOG}_aa.treefile"
+    threads: 1
+    params:
+        out_prefix="results/phylo/busco_aa_gene_trees/{busco_EOG}_aa",
+        model="JTT"
+    conda:
+        "envs/iqtree.yaml"
+    container:
+        "https://depot.galaxyproject.org/singularity/iqtree%3A3.0.1--h503566f_0"
+    log:
+        "results/logs/phylo/iqtree_aa.{busco_EOG}.log"
+    shell:
+        """
+( iqtree -s {input} --prefix {params.out_prefix} -T AUTO --threads-max {threads} -m {params.model} -msub nuclear -B 1000 -alrt 1000 ) &> {log}
+        """
+
+## Rule for paralogous filtering (reated by Nikita)
+### All the output files should go into a specific directory
+### This would be good to have as an input to the script
+### Figure conda / singularity environments needs
+
+
+rule paralogous_filtering:
+    input:
+        tree_file="results/phylo/busco_aa_gene_trees/{busco_EOG}_aa.treefile",
+        alignment_file="results/phylo/busco_aa_alignments_trim/{busco_EOG}_aa.fasta"
+    output:
+        mafft_clipkit="results/phylo/paralogous_filtering/*.faa.filtered.mafft.clipkit",
+        mafft_clipkit_original="results/phylo/paralogous_filtering/*.faa.filtered.mafft.clipkit.original",
+        mafft_clipkit_removed="results/phylo/paralogous_filtering/*.faa.filtered.mafft.clipkit.removed",
+        extended_tree_file="results/phylo/paralogous_filtering/*.faa.mafft.clipkit.extended_treefile.tre"
+    threads: 1
+    log:
+        "results/logs/paralogous_filtering.log"
+    conda:
+        #"envs/paralog.yaml"
+    container:
+        #"https://depot.galaxyproject.org/singularity/amas%3A1.0--pyh864c0ab_0"
+    shell:
+        """
+( python3 Paralogous_filtering.py {input.tree_file} {input.alignment_file} ) &> {log}
 """
+
+## Things left to do :
+### Add multi-copy genes and implement a procedure for choosing the paralogs
+
+# Row 179 : Step get aa only copying from single copy --> add multi (in the same rule)
+# Currently, the sequence are renamed with the species name (as we only have one gene per file) --> Won't work for mutltiple gene
+
+### Add the option to run busco with the --augustus argument. There needs to be some change with the augustus config in the singularity image
+
+### Modularise the pipeline to help tidy it up and allow for plug-and-play configuration
+
+### Tidy up the conda envs - at the moment these have no version numbers. They should be consistent with the singularity/docker images.
+
+
+
+
+
+
+
 
 def aggregate_EOGs_aa(wildcards):
     checkpoint_output = checkpoints.collect_busco.get(**wildcards).output[0]
@@ -407,7 +482,6 @@ rule busco_supermatrix_nt:
         """
 ( AMAS.py concat -f fasta -d dna --concat-out {output.matrix} --concat-part {output.partitions} -i {input}  ) &> {log}
 """
-
 
 rule busco_iqtree_nt:
     input:

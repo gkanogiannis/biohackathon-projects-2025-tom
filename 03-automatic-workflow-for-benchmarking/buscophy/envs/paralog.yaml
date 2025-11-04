@@ -1,0 +1,6 @@
+channels:
+  - bioconda
+  - conda-forge
+dependencies:
+  - ete4=4.2.2
+  - biopython=1.85
