@@ -428,6 +428,17 @@ rule paralogous_filtering:
 ( python3 ./scripts/Paralogous_filtering.py {input.tree_file} {input.alignment_file} {output.adjusted_alignment} {output.paralog_alignment} {output.paralog_stats}) &> {log}
 """
 
+rule clean_header:
+    input:
+        "results/phylo/busco_aa_alignments_filtered/{busco_EOG}_aa_adjusted.fasta"
+    output:
+        "results/phylo/busco_aa_alignments_filtered_renamed/{busco_EOG}_aa_adjusted.fasta"
+    shell:
+        """
+# split the header and only keep the first two parts of the name
+awk '/^>/ {{split(substr($0,2),a,"_"); print ">"a[1]"_"a[2]}} !/^>/ {{print}}' {input} > {output}
+"""
+
 
 def get_all_paralogtrees(wildcards):
     checkpoint_output = checkpoints.collect_busco.get(**wildcards).output[0]
@@ -498,6 +509,8 @@ rule clean_header:
 awk '/^>/ {{split(substr($0,2),a,"_"); print ">"a[1]"_"a[2]}} !/^>/ {{print}}' {input} > {output}
 """
 
+
+## Add supermatrix construction and run iqtree
 
 ##################modified this
 ## TODO : Aggregate outputs of paralogous_filtering for the supermatrix
