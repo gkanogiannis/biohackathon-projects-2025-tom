@@ -413,8 +413,9 @@ rule paralogous_filtering:
         tree_file="results/phylo/busco_aa_gene_trees/{busco_EOG}_aa.treefile",
         alignment_file="results/phylo/busco_aa_alignments_trim/{busco_EOG}_aa.fasta"
     output:
-        adjusted_tree="results/phylo/busco_aa_adjusted_trees/{busco_EOG}_aa_adjusted.treefile",
-        paralog_report="results/phylo/busco_aa_adjusted_trees/{busco_EOG}_aa_paralog.txt"
+        adjusted_alignment="results/phylo/busco_aa_alignments_filtered/{busco_EOG}_aa_adjusted.fasta",
+        paralog_alignment="results/phylo/busco_aa_alignments_filtered/{busco_EOG}_aa_paralog.fasta"
+        paralog_stats="results/phylo/busco_aa_alignments_filtered/{busco_EOG}_aa_paralog.stats"
     threads: 1
     log:
         "results/logs/paralogous_filtering.{busco_EOG}.log"
@@ -424,8 +425,9 @@ rule paralogous_filtering:
         "https://depot.galaxyproject.org/singularity/amas%3A1.0--pyh864c0ab_0"
     shell:
         """
-( python3 Paralogous_filtering.py {input.tree_file} {input.alignment_file} {output.adjusted_tree} {output.paralog_report}) &> {log}
+( python3 ./scripts/Paralogous_filtering.py {input.tree_file} {input.alignment_file} {output.adjusted_alignment} {output.paralog_alignment} {output.paralog_stats}) &> {log}
 """
+
 
 def get_all_paralogtrees(wildcards):
     checkpoint_output = checkpoints.collect_busco.get(**wildcards).output[0]

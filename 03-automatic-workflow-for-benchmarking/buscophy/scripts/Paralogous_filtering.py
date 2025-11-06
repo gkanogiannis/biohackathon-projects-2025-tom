@@ -40,7 +40,7 @@ def modify_alignment_headers(file_path):
             record.description = record.id
             SeqIO.write(record, out_handle, "fasta")
 
-    os.replace(temp_file, file_path)
+    #os.replace(temp_file, file_path)
 
 def create_output_folders():
     main_folder = "paralogy_output"
@@ -100,7 +100,7 @@ def load_and_root_tree(tfile, afile=None):
     t.standardize()
     return t
 
-def deal_with_inparalogs(my_inpar,al_f,aoutfile,poutfile):
+def deal_with_inparalogs(my_inpar,al_f):
     '''
     From a provided list of inparalog sequences keeps the longest sequence only. It also creates a file with deleted
     inparaloug sequences.
@@ -121,14 +121,15 @@ def deal_with_inparalogs(my_inpar,al_f,aoutfile,poutfile):
         removed_records = [rec for rec in target_records if rec.id != longest_target.id]
         final_records = other_records + [longest_target]
 
-        SeqIO.write(final_records, aoutfile, "fasta")
+        #SeqIO.write(final_records, aoutfile, "fasta")
     num_removed = 0
 
-    if removed_records:
-        with open(poutfile, "a") as rem_f:
-            num_removed = SeqIO.write(removed_records, rem_f, "fasta")
+    #if removed_records:
+    #    with open(poutfile, "a") as rem_f:
+    #        num_removed = SeqIO.write(removed_records, rem_f, "fasta")
     
-    return num_removed         
+    #return num_removed         
+    return removed_records         
 
 
 def count_number_of_sp(child):
@@ -167,7 +168,7 @@ def keep_on_branch(child1,child2):
     else:
         return "child2"
 
-def deal_with_outparalogs(child1,child2,alignment_filename,aoutfile,poutfile):
+def deal_with_outparalogs(child1,child2,alignment_filename):
     '''
     From provided branches with outparaloug sequences keeps the branch with the highest number of sequences. It also creates a file with deleted
     outparaloug sequences.
@@ -190,12 +191,12 @@ def deal_with_outparalogs(child1,child2,alignment_filename,aoutfile,poutfile):
     print("Removed records: ", removed_records)
     filtered_alignment = MultipleSeqAlignment(filtered_records)
 
-    AlignIO.write(filtered_alignment, aoutfile, "fasta")
+    #AlignIO.write(filtered_alignment, aoutfile, "fasta")
     num_removed = 0
-    if removed_records:
-        with open(poutfile, "a") as rem_f:
-            num_removed = SeqIO.write(removed_records, rem_f, "fasta")
-    return num_removed        
+    #if removed_records:
+    #    with open(poutfile, "a") as rem_f:
+    #        num_removed = SeqIO.write(removed_records, rem_f, "fasta")
+    return removed_records        
 
 
 def detect_duplication_events(t,al_f,aoutfile,poutfile):
@@ -208,6 +209,7 @@ def detect_duplication_events(t,al_f,aoutfile,poutfile):
 
     inparalogs_removed_per_gene = 0
     outparalogs_removed_per_gene = 0
+    paralogs_removed=[]
     for ev in events:
 
         r = {'S': 'Orthology', 'D': 'Paralogy'}[ev.etype]
@@ -222,17 +224,28 @@ def detect_duplication_events(t,al_f,aoutfile,poutfile):
                 print("Inparalogy was detected!")
                 my_inparalogy = ev.in_seqs.union(ev.out_seqs)
                 print(my_inparalogy)
-                inparalogs_removed_per_gene += deal_with_inparalogs(my_inparalogy,al_f,aoutfile,poutfile)
-                print(inparalogs_removed_per_gene)
+                #inparalogs_removed_per_gene += deal_with_inparalogs(my_inparalogy,al_f,aoutfile,poutfile)
+                paralogs_removed.extend(deal_with_inparalogs(my_inparalogy,al_f))
+                inparalogs_removed_per_gene+=len(deal_with_inparalogs(my_inparalogy,al_f))
             else:
                 print("Outparalogy was detected!")
                 print(ev.in_seqs)
                 print(ev.out_seqs)
-                outparalogs_removed_per_gene += deal_with_outparalogs(ev.in_seqs,ev.out_seqs,aoutfile,poutfile)
+                #outparalogs_removed_per_gene += deal_with_outparalogs(ev.in_seqs,ev.out_seqs,aoutfile,poutfile)
+                paralogs_removed.extend(deal_with_outparalogs(my_inparalogy,al_f))
+                outparalogs_removed_per_gene+=len(deal_with_outparalogs(my_inparalogy,al_f))
 
         else:
 
             print("Orthology was detected!")
+    remove_ids=[]
+    for seq in paralogs_removed:
+       remove_ids.append(seq.id) 
+    records = list(SeqIO.parse(al_f, "fasta"))
+    unique_records = [rec for rec in records if rec.id not in remove_ids]
+    SeqIO.write(unique_records, aoutfile, "fasta")
+    paralog_records = [rec for rec in records if rec.id in remove_ids]
+    SeqIO.write(paralog_records, poutfile, "fasta")
 
     return inparalogs_removed_per_gene, outparalogs_removed_per_gene
 
@@ -260,6 +273,7 @@ def view_tree(tfile, afile, aoutfile, poutfile, soutfile):
         #tree_file = os.path.join(tfile, tree_file)
         #alignment_file = os.path.join(afile, alignment_file)
     modify_alignment_headers(alignment_file)
+    alignment_file=afile + '.tmp'
         # load and root trees to a midpoint using ete4
     t = load_and_root_tree(tree_file, alignment_file)
         #if t is None:
