@@ -323,7 +323,7 @@ rule busco_geneTrees:
     input:
         "results/phylo/busco_aa_alignments_trim/{busco_EOG}_aa.fasta"
     output:
-        tree_file="results/phylo/busco_aa_gene_trees/{busco_EOG}_aa.treefile",
+        tree="results/phylo/busco_aa_gene_trees/{busco_EOG}_aa.treefile",
         reports=temp(multiext("results/phylo/busco_aa_gene_trees/{busco_EOG}_aa",".ckp.gz", ".log", ".bionj", ".iqtree", ".contree", ".mldist", ".splits.nex"))
     threads: 1
     params:
@@ -336,29 +336,29 @@ rule busco_geneTrees:
     log:
         "results/logs/phylo/iqtree_aa.{busco_EOG}.log"
     shell:
-        """
-        (if [ -s {input} ]; then
-    iqtree -s {input} --prefix {params.prefix} -T AUTO --threads-max {threads} -m {params.model} -msub nuclear -B 1000 -alrt 1000
-
- else
-     echo "Empty input: {input}"
-     touch {output.tree} {output.reports}
-
-fi)&>{log}
-
+        r"""
+        set -euo pipefail
+        (
+            iqtree -s {input} \
+                   --prefix {params.out_prefix} \
+                   -T AUTO --threads-max {threads} \
+                   -m {params.model} -msub nuclear -B 1000 -alrt 1000
+        ) &> {log} || (
+            echo "IQ-TREE failed for {wildcards.busco_EOG}, creating dummy treefile." >> {log}
+            touch {output.tree} {output.reports}
+        )
         """
 #        """
-#( iqtree -s {input} --prefix {params.out_prefix} -T AUTO --threads-max {threads} -m {params.model} -msub nuclear -B 1000 -alrt 1000 ) &> {log}
-#        """
-
-#busco_ids = [f.replace("_aa.fasta", "").split("/")[-1]
-#             for f in glob_wildcards("results/phylo/busco_aa_alignments_trim/{busco_EOG}_aa.fasta").busco_EOG]
+#        (if [ -s {input} ]; then
+#    iqtree -s {input} --prefix {params.out_prefix} -T AUTO --threads-max {threads} -m {params.model} -msub nuclear -B 1000 -alrt 1000
 #
-#rule all_busco_geneTrees_done:
-#    input:
-#        expand("results/phylo/busco_aa_gene_trees/{busco_EOG}_aa.treefile", busco_EOG=busco_ids)
-#    output:
-#        touch("results/phylo/busco_geneTrees.done")
+# else
+#     echo "Empty input: {input}"
+#     touch {output.tree} {output.reports}
+#
+#fi)&>{log}
+#
+#        """
 
 def get_all_genetrees(wildcards):
     checkpoint_output = checkpoints.collect_busco.get(**wildcards).output[0]
@@ -388,7 +388,6 @@ checkpoint collect_gene_trees:
 done )&>{log}
 """
 
-
 def process_genetrees(wildcards):
     checkpoint_output = checkpoints.collect_gene_trees.get(**wildcards).output[0]
     return expand("results/genetrees/{busco_EOG}_aa.treefile",
@@ -411,26 +410,26 @@ echo "all trees ready to process... "
 ### Figure conda / singularity environments needs
 
 
-# rule paralogous_filtering:
-#     input:
-#         tree_file="results/phylo/busco_aa_gene_trees/{busco_EOG}_aa.treefile",
-#         alignment_file="results/phylo/busco_aa_alignments_trim/{busco_EOG}_aa.fasta"
-#     output:
-#         mafft_clipkit="results/phylo/paralogous_filtering/*.faa.filtered.mafft.clipkit",
-#         mafft_clipkit_original="results/phylo/paralogous_filtering/*.faa.filtered.mafft.clipkit.original",
-#         mafft_clipkit_removed="results/phylo/paralogous_filtering/*.faa.filtered.mafft.clipkit.removed",
-#         extended_tree_file="results/phylo/paralogous_filtering/*.faa.mafft.clipkit.extended_treefile.tre"
-#     threads: 1
-#     log:
-#         "results/logs/paralogous_filtering.log"
-#     conda:
-#         #"envs/paralog.yaml"
-#     container:
-#         #"https://depot.galaxyproject.org/singularity/amas%3A1.0--pyh864c0ab_0"
-#     shell:
-#         """
-# ( python3 Paralogous_filtering.py {input.tree_file} {input.alignment_file} ) &> {log}
-# """
+rule paralogous_filtering:
+   input:
+        tree_file="results/phylo/busco_aa_gene_trees/{busco_EOG}_aa.treefile",
+        alignment_file="results/phylo/busco_aa_alignments_trim/{busco_EOG}_aa.fasta"
+    output:
+        mafft_clipkit="results/phylo/paralogous_filtering/*.faa.filtered.mafft.clipkit",
+        mafft_clipkit_original="results/phylo/paralogous_filtering/*.faa.filtered.mafft.clipkit.original",
+        mafft_clipkit_removed="results/phylo/paralogous_filtering/*.faa.filtered.mafft.clipkit.removed",
+        extended_tree_file="results/phylo/paralogous_filtering/*.faa.mafft.clipkit.extended_treefile.tre"
+    threads: 1
+    log:
+        "results/logs/paralogous_filtering.log"
+    conda:
+        "envs/paralog.yaml"
+    container:
+        "https://depot.galaxyproject.org/singularity/amas%3A1.0--pyh864c0ab_0"
+    shell:
+        """
+( python3 Paralogous_filtering.py {input.tree_file} {input.alignment_file} ) &> {log}
+"""
 
 ## Things left to do :
 ### Add multi-copy genes and implement a procedure for choosing the paralogs
